@@ -99,7 +99,55 @@ def spectral_folding_jax(fm: jnp.ndarray, nphi: int, L: int) -> jnp.ndarray:
 
 
 def launch_spectral_folding(nside, fm: jnp.ndarray, L: int) -> jnp.ndarray:
-    pass
+    start_index = 0
+    end_index = ftm_size
+    ftm_slice = 2 * L
+
+    nphi = 0
+    upper_rings_offset = []
+    lower_rings_offset = []
+
+    list_of_spectrals = []
+
+    for i in range(nside - 1):
+        nphi = 4 * (i + 1)
+
+        upper_rings_offset.append((start_index, start_index + ftm_slice, nphi))
+        lower_rings_offset.append((end_index - ftm_slice, end_index, nphi))
+
+        start_index += ftm_slice
+        end_index -= ftm_slice
+
+    equator_offset = start_index
+    equator_size = 2 * L
+    equator_ring_number = 2 * nside + 1
+
+    for upper_ring in upper_rings_offset:
+        start_offset, end_offset, nphi = upper_ring
+        print("start_offset: ", start_offset, "end_offset: ", end_offset,
+              "Size of array: ", nphi)
+        k_a = fm[start_offset:end_offset]
+        list_of_spectrals.append(spectral_folding_jax(k_a, nphi, L))
+
+    for equator_ring in range(equator_ring_number):
+        nphi = 4 * nside
+        start_offset = equator_offset + equator_ring * ftm_slice
+        end_offset = start_offset + equator_size
+        print("start_offset: ", start_offset, "end_offset: ", end_offset,
+              "Size of array: ", nphi)
+        k_a = fm[start_offset:end_offset]
+        list_of_spectrals.append(spectral_folding_jax(k_a, nphi, L))
+
+    for lower_ring in lower_rings_offset[::-1]:
+        start_offset, end_offset, nphi = lower_ring
+        print("start_offset: ", start_offset, "end_offset: ", end_offset,
+              "Size of array: ", nphi)
+        k_a = fm[start_offset:end_offset]
+        list_of_spectrals.append(spectral_folding_jax(k_a, nphi, L))
+
+    for spectral in list_of_spectrals:
+        print(spectral.shape)
+    return jnp.concatenate(list_of_spectrals)
 
 
 if __name__ == "__main__":
@@ -130,16 +178,18 @@ if __name__ == "__main__":
     assert args.L >= 2 * args.nside, "L must be greater than or equal to 2 * nside"
 
     total_pixels = 12 * args.nside**2
-
-    healpix_array = jnp.arange(total_pixels)
+    ftm_size = 2 * args.L * (4 * args.nside - 1)
 
     match args.type:
         case 'extended':
+            healpix_array = jnp.arange(total_pixels)
             result = launch_spectral_extension(args.nside, healpix_array,
                                                args.L)
         case 'folded':
+            healpix_array = jnp.arange(ftm_size)
             result = launch_spectral_folding(args.nside, healpix_array, args.L)
         case 'both':
+            healpix_array = jnp.arange(total_pixels)
             result = launch_spectral_extension(args.nside, healpix_array,
                                                args.L)
             result = launch_spectral_folding(args.nside, result, args.L)

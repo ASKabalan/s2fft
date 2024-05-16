@@ -12,7 +12,7 @@
 
 using namespace s2fft;
 
-enum FFTType { FORWARD, BACKWARD, BOTH, NONE };
+enum SpectralDirection { EXTENSION, FOLDING };
 
 void run_test(int nside, std::string type, int L, bool print_res) {
     int total_pixels = 12 * nside * nside;
@@ -23,17 +23,26 @@ void run_test(int nside, std::string type, int L, bool print_res) {
     int num_rings = 4 * nside - 1;
     int flm_size = num_rings * (2 * L);
 
-    int *h_vec_in = new int[total_pixels];
-    int *h_vec_out = new int[flm_size];
+    SpectralDirection dir = (type == "extended") ? EXTENSION : FOLDING;
+
+    int input_size = dir == EXTENSION ? total_pixels : flm_size;
+    int output_size = dir == EXTENSION ? flm_size : total_pixels;
+
+    std::cout << "input_size: " << input_size << std::endl;
+    std::cout << "output_size: " << output_size << std::endl;
+    std::cout << "Direction: " << (dir == EXTENSION ? "EXTENSION" : "FOLDING") << std::endl;
+
+    int *h_vec_in = new int[input_size];
+    int *h_vec_out = new int[output_size];
     int *d_vec_in;
     int *d_vec_out;
 
-    cudaMalloc(&d_vec_in, total_pixels * sizeof(int));
-    cudaMalloc(&d_vec_out, flm_size * sizeof(int));
+    cudaMalloc(&d_vec_in, input_size * sizeof(int));
+    cudaMalloc(&d_vec_out, output_size * sizeof(int));
 
     // Initialize host vectors using std::generate
     int start_index(0);
-    std::generate(h_vec_in, h_vec_in + total_pixels, [&start_index]() {
+    std::generate(h_vec_in, h_vec_in + input_size, [&start_index]() {
         int c;
         c = start_index;
         start_index += 1;
@@ -41,7 +50,7 @@ void run_test(int nside, std::string type, int L, bool print_res) {
     });
 
     // Copy host data to device
-    checkCudaErrors(cudaMemcpy(d_vec_in, h_vec_in, total_pixels * sizeof(int), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(d_vec_in, h_vec_in, input_size * sizeof(int), cudaMemcpyHostToDevice));
 
     ////// Create cudastream
     cudaStream_t stream;
@@ -52,16 +61,22 @@ void run_test(int nside, std::string type, int L, bool print_res) {
     size_t worksize(0);
     exec.Initialize(desc, worksize);
 
-    s2fftKernels::launch_spectral_extension(d_vec_in, d_vec_out, nside, L, exec.m_equatorial_offset_start,
-                                            exec.m_equatorial_offset_end, stream);
+    if (dir == EXTENSION) {
+        s2fftKernels::launch_spectral_extension(d_vec_in, d_vec_out, nside, L, exec.m_equatorial_offset_start,
+                                                exec.m_equatorial_offset_end, stream);
+    } else {
+        s2fftKernels::launch_spectral_folding(d_vec_in, d_vec_out, nside, L, exec.m_equatorial_offset_start,
+                                              exec.m_equatorial_offset_end, stream);
+    }
+
     cudaStreamSynchronize(stream);
     checkCudaErrors(cudaGetLastError());
 
     // Copy device data to host
-    checkCudaErrors(cudaMemcpy(h_vec_out, d_vec_out, flm_size * sizeof(int), cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(h_vec_out, d_vec_out, output_size * sizeof(int), cudaMemcpyDeviceToHost));
 
     // Print results
-    for (int i = 0; i < flm_size; i++) {
+    for (int i = 0; i < output_size; i++) {
         std::cout << "[" << i << "] " << h_vec_out[i] << std::endl;
     }
 

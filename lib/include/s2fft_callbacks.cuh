@@ -20,7 +20,7 @@ namespace s2fftKernels {
 
 // Fundamental Functions
 
-static __device__ int64 fft_shift(size_t offset, int64* params) {
+static __device__ int64 fft_shift(size_t offset, int64 *params) {
     int64 n = params[0];
     int64 dist = params[1];
     int64 first_element_offset = offset < dist ? 0 : dist;
@@ -33,7 +33,7 @@ static __device__ int64 fft_shift(size_t offset, int64* params) {
     return indx;
 }
 
-static __device__ int64 fft_shift_eq(size_t offset, int64* params) {
+static __device__ int64 fft_shift_eq(size_t offset, int64 *params) {
     int64 n = params[0];
     int64 first_element_offset = (offset / n) * n;
     int64 offset_in_ring = first_element_offset + offset % n;
@@ -45,13 +45,13 @@ static __device__ int64 fft_shift_eq(size_t offset, int64* params) {
     return indx;
 }
 
-static __device__ void normalize(cufftComplex* element, int64 size) {
+static __device__ void normalize(cufftComplex *element, int64 size) {
     float norm_factor = 1.0f / (float)size;
     element->x *= norm_factor;
     element->y *= norm_factor;
 }
 
-static __device__ void normalize_ortho(cufftComplex* element, int64 size) {
+static __device__ void normalize_ortho(cufftComplex *element, int64 size) {
     float norm_factor = 1.0f / sqrtf((float)size);
     element->x *= norm_factor;
     element->y *= norm_factor;
@@ -89,7 +89,6 @@ static __device__ void fft_norm_ortho_cb(void *dataOut, size_t offset, cufftComp
 
 static __device__ void fft_norm_cb(void *dataOut, size_t offset, cufftComplex element, void *callerInfo,
                                    void *sharedPointer) {
-
     int64 *params = (int64 *)callerInfo;
     cufftComplex *data = (cufftComplex *)dataOut;
 
@@ -104,7 +103,7 @@ static __device__ void fft_norm_ortho_shift_cb(void *dataOut, size_t offset, cuf
                                                void *callerInfo, void *sharedPointer) {
     int64 *params = (int64 *)callerInfo;
     cufftComplex *data = (cufftComplex *)dataOut;
-    
+
     normalize_ortho(&element, params[0]);
     int64 indx = fft_shift(offset, params);
 
@@ -124,7 +123,7 @@ static __device__ void fft_norm_shift_cb(void *dataOut, size_t offset, cufftComp
 
 static __device__ void fft_norm_ortho_shift_eq_cb(void *dataOut, size_t offset, cufftComplex element,
                                                   void *callerInfo, void *sharedPointer) {
-    int64 *params = (int64 *)callerInfo;    
+    int64 *params = (int64 *)callerInfo;
     cufftComplex *data = (cufftComplex *)dataOut;
 
     normalize_ortho(&element, params[0]);
@@ -162,6 +161,10 @@ static __device__ cufftComplex ifft_shift_cb(void *dataIn, size_t offset, void *
     shifted_index = shifted_index < 0 ? n + shifted_index : shifted_index;
     int64 indx = (shifted_index % n) + first_element_offset;
 
+    printf("offset: %ld, n: %lld, dist: %lld, first_element_offset: %lld, normalized_offset: %lld, "
+           "shifted_index: %lld, indx: %lld\n",
+           offset, n, dist, first_element_offset, normalized_offset, shifted_index, indx);
+
     return data[indx];
 }
 
@@ -172,7 +175,6 @@ static __device__ cufftComplex ifft_shift_eq_cb(void *dataIn, size_t offset, voi
     int64 n = params[0];
     int64 first_element_offset = (offset / n) * n;
     int64 offset_in_ring = first_element_offset + offset % n;
-
 
     int64 half = n / 2;
     int64 shifted_index = offset_in_ring - half;

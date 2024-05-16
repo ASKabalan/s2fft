@@ -1,4 +1,4 @@
-import numpy as np
+import jax.numpy as np
 from numpy.fft import fft, ifft, fftshift, ifftshift
 import argparse
 from jax import jit
@@ -115,7 +115,7 @@ def healpix_ifft(array, nside, total_pixels, shift, norm):
 
     lower_rings_offset = lower_rings_offset[::-1]
 
-    for upper_ring in upper_rings_offset:
+    for i, upper_ring in enumerate(upper_rings_offset):
         start_offset, end_offset = upper_ring
         print(
             f"start_offset: {start_offset} end_offset: {end_offset} size of array: {end_offset - start_offset} at {i}"
@@ -125,7 +125,7 @@ def healpix_ifft(array, nside, total_pixels, shift, norm):
 
     print(f"equator")
 
-    for equator_ring in range(equator_ring_number):
+    for i, equator_ring in enumerate(range(equator_ring_number)):
 
         start_offset = equator_offset + equator_ring * equator_size
         end_offset = start_offset + equator_size
@@ -139,7 +139,7 @@ def healpix_ifft(array, nside, total_pixels, shift, norm):
 
     print(f"lower")
 
-    for lower_ring in lower_rings_offset:
+    for i, lower_ring in enumerate(lower_rings_offset):
         start_offset, end_offset = lower_ring
         print(
             f"start_offset: {start_offset} end_offset: {end_offset} size of array: {end_offset - start_offset} at {(i + 3*nside)}"

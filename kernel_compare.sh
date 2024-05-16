@@ -1,7 +1,7 @@
 #!/bin/bash
 powers_of_2=(4)
 list_of_bandlimit=(8)
-spectral_dirs=(extended)
+spectral_dirs=(folded)
 
 # zipped iterator on powers_of_2 and list_of_bandlimit
 for indx in "${!powers_of_2[@]}"; do
