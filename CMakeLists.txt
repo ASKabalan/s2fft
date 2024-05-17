@@ -51,39 +51,42 @@ else()
   message(STATUS "CUDA version is not compatible (requires 12.2 and above)")
 endif()
 
-add_executable(_s2fft   
+# add_executable(_s2fft   
+#                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/extensions.cc
+#                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/s2fft.cu 
+#                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/plan_cache.cc 
+#                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/s2fft_kernels.cu 
+#                 # ${CMAKE_CURRENT_LIST_DIR}/lib/src/kernel_test.cu
+#                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/fft_test.cu
+#               )
+
+# target_link_libraries(_s2fft PRIVATE CUDA::cudart_static CUDA::cufft_static CUDA::culibos)
+# #target_link_libraries(_s2fft PRIVATE CUDA::cudart CUDA::cufft)
+# target_include_directories(_s2fft PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lib/include) 
+# set_target_properties(_s2fft PROPERTIES 
+#                     LINKER_LANGUAGE CUDA
+#                     CUDA_SEPARABLE_COMPILATION ON)
+# message(STATUS "CUDA_ARCHITECTURES: ${CMAKE_CUDA_ARCHITECTURES}")
+# set_target_properties(_s2fft PROPERTIES CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+
+
+nanobind_add_module(_s2fft STABLE_ABI  
                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/extensions.cc
                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/s2fft.cu 
                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/plan_cache.cc 
                 ${CMAKE_CURRENT_LIST_DIR}/lib/src/s2fft_kernels.cu 
-                # ${CMAKE_CURRENT_LIST_DIR}/lib/src/kernel_test.cu
-                ${CMAKE_CURRENT_LIST_DIR}/lib/src/fft_test.cu
               )
 
+
+target_include_directories(_s2fft
+PUBLIC
+${CMAKE_CURRENT_LIST_DIR}/lib/include
+${NVHPC_CUDA_INCLUDE_DIR}
+${MPI_CXX_INCLUDE_DIRS}
+${NVHPC_MATH_INCLUDE_DIR}
+)
+
 target_link_libraries(_s2fft PRIVATE CUDA::cudart_static CUDA::cufft_static CUDA::culibos)
-#target_link_libraries(_s2fft PRIVATE CUDA::cudart CUDA::cufft)
-target_include_directories(_s2fft PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lib/include) 
-set_target_properties(_s2fft PROPERTIES 
-                    LINKER_LANGUAGE CUDA
-                    CUDA_SEPARABLE_COMPILATION ON)
-message(STATUS "CUDA_ARCHITECTURES: ${CMAKE_CUDA_ARCHITECTURES}")
-set_target_properties(_s2fft PROPERTIES CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+set_target_properties(_s2fft PROPERTIES LINKER_LANGUAGE CXX)
 
-
-#nanobind_add_module(_s2fft STABLE_ABI  
-#                    ${CMAKE_CURRENT_LIST_DIR}/lib/src/plinalg.cc
-#                    ${CMAKE_CURRENT_LIST_DIR}/lib/src/hermitian_kernel.cc 
-#                    ${CMAKE_CURRENT_LIST_DIR}/lib/src/hermitian_kernel.cc.cu)
-#
-#target_include_directories(_s2fft
-#PUBLIC
-#${CMAKE_CURRENT_LIST_DIR}/lib/include
-#${NVHPC_CUDA_INCLUDE_DIR}
-#${MPI_CXX_INCLUDE_DIRS}
-#${NVHPC_MATH_INCLUDE_DIR}
-#)
-#
-#target_link_libraries(_s2fft PRIVATE MPI::MPI_CXX NVHPC::CUDA) 
-#set_target_properties(_s2fft PROPERTIES LINKER_LANGUAGE CXX)
-#
-#install(TARGETS _s2fft LIBRARY DESTINATION plinalglib)
+install(TARGETS _s2fft LIBRARY DESTINATION s2fft_lib)

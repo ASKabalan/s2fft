@@ -11,12 +11,11 @@ typedef long long int int64;
 
 namespace s2fftKernels {
 
-HRESULT launch_spectral_folding(int* data, int* output, const int& nside, const int& L,
-                                const int64& equatorial_offset_start, const int64& equatorial_offset_end,
+template <typename real_t>
+HRESULT launch_spectral_folding(void* data, void* output, const int& nside, const int& L,
                                 cudaStream_t stream);
-
-HRESULT launch_spectral_extension(int* data, int* output, const int& nside, const int& L,
-                                  const int64& equatorial_offset_start, const int64& equatorial_offset_end,
+template <typename real_t>
+HRESULT launch_spectral_extension(void* data, void* output, const int& nside, const int& L,
                                   cudaStream_t stream);
 }  // namespace s2fftKernels
 

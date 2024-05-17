@@ -5,7 +5,9 @@ import jax.numpy as jnp
 import torch
 from s2fft.sampling import s2_samples as samples
 from functools import partial
-
+from s2fft.utils.jax_pritimive import BasePrimitive, register_primitive
+import jaxlib.mlir.ir as ir
+from s2fft_lib import _s2fft
 
 def spectral_folding(fm: np.ndarray, nphi: int, L: int) -> np.ndarray:
     """Folds higher frequency Fourier coefficients back onto lower frequency
@@ -284,9 +286,11 @@ def healpix_fft_jax(f: jnp.ndarray, L: int, nside: int,
                 axis=1,
             )
         else:
-            fm_chunks = jnp.fft.fftshift(jnp.fft.fft(f_chunks,
-                                                     norm="backward"),
-                                         axes=-1)
+            # fm_chunks = jnp.fft.fftshift(jnp.fft.fft(f_chunks,
+            #                                          norm="backward"),
+            #                              axes=-1)
+            fm_chunks = jnp.fft.ifft(jnp.fft.ifftshift(f_chunks, axes=-1),
+                                     norm="backward")
         return fm_chunks
         return vmap(spectral_periodic_extension_jax, (0, None))(fm_chunks, L)
 
@@ -464,6 +468,7 @@ def healpix_ifft_jax(ftm: jnp.ndarray, L: int, nside: int,
         #              L else vmap(spectral_folding_jax,
         #                          (0, None, None))(ftm_rows, nphi, L))
         fm_chunks = ftm_rows
+        print(f"ftm_rows shape: {ftm_rows[0].shape}")
         if reality and nphi == 2 * L:
             return jnp.fft.irfft(fm_chunks[:, nphi // 2:],
                                  nphi,
@@ -483,6 +488,18 @@ def healpix_ifft_jax(ftm: jnp.ndarray, L: int, nside: int,
     # Process all ftm rows for the equal sized equatorial theta rings together
     f_chunks_equatorial = ftm_rows_to_f_chunks(ftm[nside - 1:3 * nside],
                                                4 * nside)
+    upper_rows = []
+    lower_rows = []
+    print(f"f_chunks_polar[:] shape {f_chunks_polar[:][0].shape}")
+    print(f"f_chunks_polar[0] shape {f_chunks_polar[0].shape}")
+    for t in range(nside - 1):
+        upper_rows.append(f_chunks_polar[t][0])
+        lower_rows.append(f_chunks_polar[t][1])
+    upper_rows = jnp.concatenate(upper_rows)
+    lower_rows = jnp.concatenate(lower_rows[::-1])
+    print(f"Upper rows: {upper_rows.shape}")
+    print(f"Equatorial rows: {f_chunks_equatorial.shape}")
+    print(f"Lower rows: {lower_rows.shape}")
     # Concatenate f chunks for all theta rings together, reversing second polar set
     # to account for processing order
     return jnp.concatenate(
@@ -641,3 +658,46 @@ def ring_phase_shifts_hp_jax(L: int,
                           jnp.arange(m_start_ind, L),
                           optimize=True)
     return jnp.exp(sign * 1j * exponent)
+
+
+## Cuda primitive ##
+
+
+class HealpixFFT(BasePrimitive):
+
+    @staticmethod
+    def abstract(f, L, nside, method, reality, fft_type):
+
+        # For the forward pass, the input is a HEALPix pixel-space array of size nside^2 * 12 and the output is
+        # a FTM array of shape (number of rings , width of FTM slice) which is (4 * nside - 1 , 2 * L  )
+        healpix_size = (nside**2 * 12, )
+        ftm_size = (4 * nside - 1, 2 * L)
+        if fft_type == 'forward':
+            assert f.shape == healpix_size
+            return f.update(shape=ftm_size, dtype=f.dtype)
+        elif fft_type == 'backward':
+            assert f.shape == ftm_size
+            return f.update(shape=healpix_size, dtype=f.dtype)
+        else:
+            raise ValueError(f"fft_type {fft_type} not recognised.")
+
+    @staticmethod
+    def lowering(ctx, f, *, L, nside, method, reality, fft_type):
+        (x_aval, ) = ctx.avals_in
+        (aval_out, ) = ctx.avals_out
+        dtype = x_aval.dtype
+        a_type = ir.RankedTensorType(f.type)
+        n = len(a_type.shape)
+
+        forward = fft_type == 'forward'
+        is_double = np.finfo(dtype).dtype == np.float64
+
+        workspace,opaque = 
+
+    @staticmethod
+    def impl(f, L, nside, method, reality):
+        return NotImplemented
+
+    @staticmethod
+    def per_shard_impl():
+        return NotImplemented

@@ -7,19 +7,11 @@
 
 namespace s2fftKernels {
 
-// slice_start = L - nphi // 2
-// slice_stop = slice_start + nphi
-// ftm_slice = fm[slice_start:slice_stop]
-//
-// ftm_slice = ftm_slice.at[-np.arange(1, L - nphi // 2 + 1) % nphi].add(
-//    fm[slice_start - np.arange(1, L - nphi // 2 + 1)]
-//)
-// return ftm_slice.at[np.arange(L - nphi // 2) % nphi].add(
-//    fm[slice_stop + np.arange(L - nphi // 2)]
-//)
-
-__global__ void spectral_folding(int* data, int* output, int nside, int L, int equatorial_offset_start,
-                                 int equatorial_offset_end) {
+template <typename real_t>
+__global__ void spectral_folding(void* data, void* output, int nside, int L) {
+    using complex = cuda::std::complex<real_t>;
+    complex* data_c = reinterpret_cast<complex*>(data);
+    complex* output_c = reinterpret_cast<complex*>(output);
     // few inits
     int polar_rings = nside - 1;
     int equator_rings = 3 * nside + 1;
@@ -76,16 +68,7 @@ __global__ void spectral_folding(int* data, int* output, int nside, int L, int e
         int center_offset = offset - slice_start;
         indx = center_offset + offset_ring;
 
-        output[indx] = data[current_indx];
-
-        if (ring_print == ring_index && false) {
-            printf("Ring index %d, offset %d, center offset %d, indx %d, nphi %d, current index %d, data %d, "
-                   "output "
-                   "%d\n",
-                   ring_index, offset, center_offset, indx, nphi, current_indx, data[current_indx],
-                   output[indx]);
-            ring_print = 1;
-        }
+        output_c[indx] = data_c[current_indx];
     }
     __syncthreads();
     // printf("Current index %d slice start %d slice end %d nphi %d\n", current_indx, slice_start, slice_end,
@@ -98,18 +81,7 @@ __global__ void spectral_folding(int* data, int* output, int nside, int L, int e
 
         folded_index = folded_index + offset_ring;
         target_index = target_index + ftm_offset;
-        atomicAdd(&output[folded_index], data[target_index]);
-
-        if (ring_print == ring_index) {
-            printf("Ring index %d, offset %d,slice_start %d,slice_end %d, \n\t\t --> offset_ring %d , "
-                   "ftm_offset %d ,  "
-                   "folded index %d, target index %d, \n\t\t --> current index "
-                   "%d,nphi %d, data %d, "
-                   "output "
-                   "%d\n",
-                   ring_index, offset, slice_start, slice_end, offset_ring, ftm_offset, folded_index,
-                   target_index, current_indx, nphi, data[folded_index], output[target_index]);
-        }
+        atomicAdd(&output_c[folded_index], data_c[target_index]);
     }
     // fold the positive part of the spectrum
     else if (offset >= slice_end) {
@@ -119,23 +91,15 @@ __global__ void spectral_folding(int* data, int* output, int nside, int L, int e
 
         folded_index = folded_index + offset_ring;
         target_index = target_index + ftm_offset;
-        atomicAdd(&output[folded_index], data[target_index]);
-
-        if (ring_print == ring_index && true) {
-            printf("Ring index %d, offset %d,slice_start %d,slice_end %d, \n\t\t --> offset_ring %d , "
-                   "ftm_offset %d ,  "
-                   "folded index %d, target index %d, \n\t\t --> current index "
-                   "%d,nphi %d, data %d, "
-                   "output "
-                   "%d\n",
-                   ring_index, offset, slice_start, slice_end, offset_ring, ftm_offset, folded_index,
-                   target_index, current_indx, nphi, data[folded_index], output[target_index]);
-        }
+        atomicAdd(&output_c[folded_index], data_c[target_index]);
     }
 }
 
-__global__ void spectral_extension(int* data, int* output, int nside, int L, int equatorial_offset_start,
-                                   int equatorial_offset_end) {
+template <typename real_t>
+__global__ void spectral_extension(void* data, void* output, int nside, int L) {
+    using complex = cuda::std::complex<real_t>;
+    complex* data_c = reinterpret_cast<complex*>(data);
+    complex* output_c = reinterpret_cast<complex*>(output);
     // few inits
     int polar_rings = nside - 1;
     int equator_rings = 3 * nside + 1;
@@ -182,27 +146,18 @@ __global__ void spectral_extension(int* data, int* output, int nside, int L, int
         pos = 0;
     }
 
-    // Spectral extension
-    // The resulting array has size 2 * L and it has these indices :
-
-    // fm[-jnp.arange(L - nphi // 2, 0, -1) % nphi],
-    // fm,
-    // fm[jnp.arange(L - (nphi + 1) // 2) % nphi],
-
-    // Compute the negative part of the spectrum
-    // printf("Offset %d (L + nphi / 2) %d \n", offset, (L + nphi / 2));
     if (offset < L - nphi / 2) {
         indx = (-(L - nphi / 2 - offset)) % nphi;
         indx = indx < 0 ? nphi + indx : indx;
         indx = indx + offset_ring;
-        output[current_indx] = data[indx];
+        output_c[current_indx] = data_c[indx];
     }
 
     // Compute the central part of the spectrum
     else if (offset >= L - nphi / 2 && offset < L + nphi / 2) {
         int center_offset = offset - /*negative part offset*/ (L - nphi / 2);
         indx = center_offset + offset_ring;
-        output[current_indx] = data[indx];
+        output_c[current_indx] = data_c[indx];
     }
     // Compute the positive part of the spectrum
     else {
@@ -210,56 +165,40 @@ __global__ void spectral_extension(int* data, int* output, int nside, int L, int
         indx = (L - (int)((nphi + 1) / 2) - reverse_offset) % nphi;
         indx = indx < 0 ? nphi + indx : indx;
         indx = indx + offset_ring;
-        output[current_indx] = data[indx];
-        // printf("Positive part: element at offset %d came from %d\n", current_indx, indx);
+        output_c[current_indx] = data_c[indx];
     }
-
-    // Only use global memory for now
-    // printf("For current index %d,data index %d ring index is %d and nphi is %d and pos is %d, output is
-    // [%d] "
-    //        "and original is [%d]\n",
-    //        current_indx, indx, ring_index, nphi, pos, output[current_indx], data[indx]);
-    //}
 }
 
-HRESULT launch_spectral_folding(int* data, int* output, const int& nside, const int& L,
-                                const int64& equatorial_offset_start, const int64& equatorial_offset_end,
+template <typename real_t>
+HRESULT launch_spectral_folding(void* data, void* output, const int& nside, const int& L,
                                 cudaStream_t stream) {
-    std::cout << "Launching kernel" << std::endl;
     int block_size = 128;
     int ftm_elements = 2 * L * (4 * nside - 1);
     int grid_size = (ftm_elements + block_size - 1) / block_size;
-    std::cout << "Grid size: " << grid_size << std::endl;
-    std::cout << "Block size: " << block_size << std::endl;
-    std::cout << "L: " << L << std::endl;
-    std::cout << "equatorial_offset_start: " << equatorial_offset_start << std::endl;
-    std::cout << "equatorial_offset_end: " << equatorial_offset_end << std::endl;
 
-    spectral_folding<<<grid_size, block_size, 0, stream>>>(data, output, nside, L, equatorial_offset_start,
-                                                           equatorial_offset_end);
+    spectral_folding<real_t><<<grid_size, block_size, 0, stream>>>(data, output, nside, L);
     checkCudaErrors(cudaGetLastError());
     return S_OK;
 }
 
-HRESULT launch_spectral_extension(int* data, int* output, const int& nside, const int& L,
-                                  const int64& equatorial_offset_start, const int64& equatorial_offset_end,
+template <typename real_t>
+HRESULT launch_spectral_extension(void* data, void* output, const int& nside, const int& L,
                                   cudaStream_t stream) {
     // Launch the kernel
-    std::cout << "Launching kernel" << std::endl;
     int block_size = 128;
     int ftm_elements = 2 * L * (4 * nside - 1);
     int grid_size = (ftm_elements + block_size - 1) / block_size;
-    std::cout << "Grid size: " << grid_size << std::endl;
-    std::cout << "Block size: " << block_size << std::endl;
-    std::cout << "L: " << L << std::endl;
-    std::cout << "equatorial_offset_start: " << equatorial_offset_start << std::endl;
-    std::cout << "equatorial_offset_end: " << equatorial_offset_end << std::endl;
 
-    spectral_extension<<<grid_size, block_size, 0, stream>>>(data, output, nside, L, equatorial_offset_start,
-                                                             equatorial_offset_end);
+    spectral_extension<real_t><<<grid_size, block_size, 0, stream>>>(data, output, nside, L);
 
     checkCudaErrors(cudaGetLastError());
     return S_OK;
 }
+
+// Specializations
+template HRESULT launch_spectral_folding<float>(void* data, void* output, const int& nside, const int& L,
+                                                cudaStream_t stream);
+template HRESULT launch_spectral_folding<double>(void* data, void* output, const int& nside, const int& L,
+                                                 cudaStream_t stream);
 
 }  // namespace s2fftKernels

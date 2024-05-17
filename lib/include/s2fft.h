@@ -33,27 +33,31 @@ public:
     bool forward = true;
     fft_norm norm = BACKWARD;
     bool shift = true;
+    bool double_precision = false;
 
     s2fftDescriptor(int nside, int harmonic_band_limit, bool reality, bool forward = true,
-                    fft_norm norm = BACKWARD, bool shift = true)
+                    fft_norm norm = BACKWARD, bool shift = true, bool double_precision = false)
             : nside(nside),
               harmonic_band_limit(harmonic_band_limit),
               reality(reality),
               norm(norm),
               forward(forward),
-              shift(shift) {}
+              shift(shift),
+              double_precision(double_precision) {}
 
     s2fftDescriptor() = default;
     ~s2fftDescriptor() = default;
 
     bool operator==(const s2fftDescriptor &other) const {
         return nside == other.nside && harmonic_band_limit == other.harmonic_band_limit &&
-               reality == other.reality && norm == other.norm && forward == other.forward &&
-               shift == other.shift;
+               reality == other.reality && norm == other.norm && shift == other.shift &&
+               double_precision == other.double_precision;
     }
 };
+
+template <typename real_t>
 class s2fftExec {
-    using complex_t = cuda::std::complex<float>;
+    using complex_t = cuda::std::complex<real_t>;
     friend class PlanCache;
 
 public:
@@ -62,9 +66,9 @@ public:
 
     HRESULT Initialize(const s2fftDescriptor &descriptor, size_t &worksize);
 
-    HRESULT Forward(const s2fftDescriptor &desc, cudaStream_t stream, void **buffers);
+    HRESULT Forward(const s2fftDescriptor &desc, cudaStream_t stream, void *data);
 
-    HRESULT Backward(const s2fftDescriptor &desc, cudaStream_t stream, void **buffers);
+    HRESULT Backward(const s2fftDescriptor &desc, cudaStream_t stream, void *data);
 
 public:
     std::vector<cufftHandle> m_polar_plans;
@@ -80,7 +84,7 @@ public:
     std::vector<int64> m_lower_ring_offsets;
 
     // Callback params stored for cleanup purposes
-    //thrust::device_vector<cb_params> m_cb_params;
+    // thrust::device_vector<cb_params> m_cb_params;
 };
 
 }  // namespace s2fft
@@ -91,7 +95,7 @@ struct hash<s2fft::s2fftDescriptor> {
     std::size_t operator()(const s2fft::s2fftDescriptor &k) const {
         size_t hash = std::hash<int>()(k.nside) ^ (std::hash<int>()(k.harmonic_band_limit) << 1) ^
                       (std::hash<bool>()(k.reality) << 2) ^ (std::hash<int>()(k.norm) << 3) ^
-                      (std::hash<bool>()(k.shift) << 4);
+                      (std::hash<bool>()(k.shift) << 4) ^ (std::hash<bool>()(k.double_precision) << 5);
         return hash;
     }
 };

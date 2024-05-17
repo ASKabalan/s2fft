@@ -1,7 +1,7 @@
 #!/bin/bash
-powers_of_2=(256)
+powers_of_2=(4 8 16 23 64 128 256)
 normalizations=(bwd)
-directions=(fwd)
+directions=(bwd)
 
 for nside in "${powers_of_2[@]}"; do
     echo "*****************************************"
@@ -19,8 +19,8 @@ for nside in "${powers_of_2[@]}"; do
             echo "Running test for nside=$nside, norm=$norm, dir=$dir with shift"
 
             ./build/_s2fft --nside $nside --norm $norm --ffttype $dir --shift --print > _logs/cuda_output.log
-            # python _scripts/fft_test.py --nside $nside --norm $norm --ffttype $dir --shift --print > _logs/python_output.log 
-            # python _scripts/comparer.py -f _logs/cuda_output.log _logs/python_output.log -p
+            python notebooks/JAX_HP_Test.py --nside $nside  &> _logs/python_output.log 
+            python _scripts/comparer.py -f _logs/cuda_output.log _logs/python_output.log 
 
 
         done

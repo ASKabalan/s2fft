@@ -17,7 +17,8 @@
 
 namespace s2fft {
 
-HRESULT s2fftExec::Initialize(const s2fftDescriptor &descriptor, size_t &worksize) {
+template <typename real_t>
+HRESULT s2fftExec<real_t>::Initialize(const s2fftDescriptor &descriptor, size_t &worksize) {
     m_nside = descriptor.nside;
     m_total_pixels = 12 * m_nside * m_nside;
 
@@ -180,45 +181,45 @@ HRESULT s2fftExec::Initialize(const s2fftDescriptor &descriptor, size_t &worksiz
     return S_OK;
 }
 
-HRESULT s2fftExec::Forward(const s2fftDescriptor &desc, cudaStream_t stream, void **buffers) {
-    void *data_d = buffers[0];
-    cufftComplex *data_c_d = static_cast<cufftComplex *>(data_d);
-    // Polar rings ffts
+template <typename real_t>
+HRESULT s2fftExec<real_t>::Forward(const s2fftDescriptor &desc, cudaStream_t stream, void *data) {
+    // Polar rings ffts*/
+    complex_t *data_c = reinterpret_cast<complex_t *>(data);
     for (int i = 0; i < m_nside - 1; i++) {
         int upper_ring_offset = m_upper_ring_offsets[i];
 
         CUFFT_CALL(cufftSetStream(m_polar_plans[i], stream))
-        CUFFT_CALL(cufftExecC2C(m_polar_plans[i], data_c_d + upper_ring_offset, data_c_d + upper_ring_offset,
-                                CUFFT_FORWARD));
+        CUFFT_CALL(cufftXtExec(m_polar_plans[i], data_c + upper_ring_offset, data_c + upper_ring_offset,
+                               CUFFT_FORWARD));
     }
 
     // Equator fft
     CUFFT_CALL(cufftSetStream(m_equator_plan, stream))
-    CUFFT_CALL(cufftExecC2C(m_equator_plan, data_c_d + m_equatorial_offset_start,
-                            data_c_d + m_equatorial_offset_start, CUFFT_FORWARD));
+    CUFFT_CALL(cufftXtExec(m_equator_plan, data_c + m_equatorial_offset_start,
+                           data_c + m_equatorial_offset_start, CUFFT_FORWARD));
     //
     return S_OK;
 }
 
-HRESULT s2fftExec::Backward(const s2fftDescriptor &desc, cudaStream_t stream, void **buffers) {
-    void *data_d = buffers[0];
-    cufftComplex *data_c_d = static_cast<cufftComplex *>(data_d);
-
+template <typename real_t>
+HRESULT s2fftExec<real_t>::Backward(const s2fftDescriptor &desc, cudaStream_t stream, void *data) {
     // Polar rings inverse FFTs
     for (int i = 0; i < m_nside - 1; i++) {
-        //  if ( i > 60) continue;
-
         int upper_ring_offset = m_upper_ring_offsets[i];
 
         CUFFT_CALL(cufftSetStream(m_inverse_polar_plans[i], stream))
-        CUFFT_CALL(cufftExecC2C(m_inverse_polar_plans[i], data_c_d + upper_ring_offset,
-                                data_c_d + upper_ring_offset, CUFFT_INVERSE));
+        CUFFT_CALL(cufftXtExec(m_inverse_polar_plans[i], data + upper_ring_offset, data + upper_ring_offset,
+                               CUFFT_INVERSE));
     }
     // Equator inverse FFT
     CUFFT_CALL(cufftSetStream(m_inverse_equator_plan, stream))
-    CUFFT_CALL(cufftExecC2C(m_inverse_equator_plan, data_c_d + m_equatorial_offset_start,
-                            data_c_d + m_equatorial_offset_start, CUFFT_INVERSE));
+    CUFFT_CALL(cufftXtExec(m_inverse_equator_plan, data + m_equatorial_offset_start,
+                           data + m_equatorial_offset_start, CUFFT_INVERSE));
     //
     return S_OK;
 }
+
+template class s2fftExec<float>;
+template class s2fftExec<double>;
+
 }  // namespace s2fft
